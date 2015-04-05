@@ -1,0 +1,609 @@
+#!/usr/bin/perl -w
+##############################################################################
+#                                                                             
+# Check Tex Association Reference Manual for Summits on the Air programme.
+#
+# This program was written by Jaakko Koivuniemi OH7BF on April 5 2015.  
+# The grid square calculation code from DXBearing written by Dirk Koopman 
+# G1TLH is used.
+# Copyright (C) 2015 Jaakko Koivuniemi.
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+#############################################################################
+
+use strict;
+use Getopt::Std;
+use open ':std', ':encoding(utf-8)';
+
+binmode STDOUT, ":encoding(utf8)";
+
+use subs qw/char2tex lltoqra printusage printversion ReadSummitList slat slong/;
+
+my $verno="20150405";
+
+# unicode character conversion for LaTeX output, used with option '-m'
+my %texconv =('\x{00B0}' => '$^\circ$',
+              '\x{00C4}' => '\"A',
+              '\x{00C5}' => '\oA',
+              '\x{00D6}' => '\"O',
+              '\x{00DC}' => '\"U', 
+              '\x{00E1}' => "\\'a",
+              '\x{00E2}' => '\^a',
+              '\x{00E4}' => '\"a',
+              '\x{00E5}' => '\oa',
+              '\x{00F6}' => '\"o',
+              '\x{00FC}' => '\"u',
+              '\x{0110}' => '\DJ{}',
+              '\x{0111}' => '\dj{}',
+              '\x{014A}' => '\NG{}',
+              '\x{014B}' => '\ng{}',
+              '\x{0166}' => '\txx{}',
+              '\x{0167}' => '\tx{}',
+              '<' => '$<$',
+              '>' => '$>$'
+             );
+
+# ascii character conversion for LaTeX output, used with option '-n'
+my %texconv2 =('á' => "\\'a",
+              'â' => '\^a',
+              'ü' => '\"u',
+              'ä' => '\"a',
+              'ö' => '\"o',
+              'å' => '\oa',
+              'Ü' => '\"U',
+              'Ä' => '\"A',
+              'Ö' => '\"O',
+              'Å' => '\oA',
+              '°' => '$^\circ$',
+              '<' => '$<$',
+              '>' => '$>$'
+             );
+
+# LaTeX conversion to unicode characters, used with option '-l'
+my %uniconv =("\\'a" => "\x{00E1}",
+              '\\^a'  => "\x{00E2}",
+              '\\"u'  => "\x{00FC}",
+              '\\"a'  => "\x{00E4}",
+              '\\"o'  => "\x{00F6}",
+#              '\\oa'  => "\x{00E5}",
+#              '\\v\sc' => "\x{010D}",
+#              '\\v\ s' => "\x{0161}",
+#             '\\v\ z' => "\x{017E}",
+              '\\"U'  => "\x{00DC}",
+              "\\'A"  => "\x{00C1}",
+              '\\"A'  => "\x{00C4}",
+              '\\"O'  => "\x{00D6}",
+#              '\\oA'  => "\x{00C5}",
+#              '\\v\ C' => "\x{010C}",
+#              '\\v\ S' => "\x{0160}",
+#              '\\v\ Z' => "\x{017D}",
+              '$^\circ$' => "\x{00B0}",
+#              '$<$'  => '<',
+#              '$>$'  => '>'
+             );
+
+
+my $asso="Unknown";
+my $file="";
+my $ref; # summit SOTA reference
+my %region; # region name for each SOTA reference
+my %names; # summit name for each SOTA reference
+my %lat; # latitude for each SOTA reference
+my %lon; # longitude for each SOTA reference
+my %latlon; # latitude/longitude for each SOTA reference
+my $lalo; # truncated latitude/longitude for duplicate checking
+my %altm; # altitude in meters for each SOTA reference
+my %altft; # altitude in feet for each SOTA reference
+my %pnts; # points for each SOTA reference
+my %vfrom; # valid from date for each SOTA reference
+my %vto; # valid to date for each SOTA reference
+
+my %dbregion; # database region names
+my %armregion; # ARM regions
+my $ndbsums=0; # number of database summits
+my $narmsums=0; # number of ARM summits
+my %dblocs; # database grid squares
+my %armlocs; # ARM gird squares
+my %dbpnts; # database points
+my %armpnts; # ARM points
+my $dbpnt=0; # database total points
+my $armpnt=0; # ARM total points
+
+# options: -h help, -V version, -v verbose, -f Tex file, -L summitlist.csv
+# -a association
+our ($opt_h,$opt_V,$opt_v,$opt_f,$opt_L,$opt_a,$opt_n,$opt_m,$opt_l,$opt_T);
+
+getopts('hVvf:L:a:nmlT');
+
+printversion() if($opt_V); 
+printusage() if($opt_h||(!$opt_f)&&(!$opt_L)||((!$opt_L)&&(!$opt_a)&&(!$opt_l))); 
+$asso = $opt_a if($opt_a);
+
+if(!$opt_l)
+{
+   ReadSummitList();
+
+   print "No summits for '$asso' where found from database list\n" if($ndbsums==0);
+}
+
+my $TFILE;
+my $line="";
+my ($rf,$la,$lo,$loc,$loc2,$loc3,$name,$am,$aft,$from,$to,$pnt);
+my $r=0;
+my $texname="";
+my $reg="";
+
+$file = $opt_f if($opt_f);
+if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
+{
+   print "Compare ARM and database list\n" if(!$opt_l);
+   $line = <$TFILE>;
+   while($line)
+   {
+# JS-001 & 367 & 1206 & Naulavaara           & 63.88749 & 28.24187 & KP43CV & 01/05/10 & & 1 
+      if($line =~ /^(\w\w-\d\d\d)\s+&\s+(\d{3,4})\s+&\s+(\d{3,5})\s+&\s+(.+)\s+&\s+([+-]?\d{1,2}\.\d{3,7})\s+&\s+([+-]?\d{1,2}\.\d{3,7})\s+&\s+(\w\w\d\d\w\w)\s+&\s+(\d\d\/\d\d\/\d\d)\s+&\s+(.*)\s*&\s+(\d{1,2}).+/)
+      {
+#         print "$1 $4 $5 $6\n";
+         $narmsums++;
+         $rf = $1;
+         $am = 1*$2;
+         $aft = 1*$3;
+         $name = $4;
+         $la = 1*$5;
+         $lo = 1*$6;
+         $loc = $7;
+         $from = $8;
+         $to = $9;
+         $pnt = 1*$10;
+
+         if(!$opt_l)
+         {
+            if(exists $altm{$rf})
+            {
+               print "-- $rf ARM altitude $am m != DB $altm{$rf} m\n" if($am != $altm{$rf});
+            }
+            else
+            {
+               print "-- '$rf' metric altitude $am not in summit list?\n";
+            }
+
+            if(exists $altft{$rf})
+            {
+               print "-- $rf ARM altitude $aft ft != DB $altft{$rf} ft\n" if($aft != $altft{$rf});
+            }
+            else
+            {
+               print "-- '$rf' feet altitude $aft not in summit list?\n";
+            }
+
+            if(exists $lat{$rf})
+            {
+               if((abs($la) > 0.1)&&(abs($lat{$rf}) > 0.1))
+               {
+                  $r = $la/$lat{$rf};
+                  if(($r < 0.99999)||($r > 1.00001))
+                  {
+                     print "-- $rf ARM latitude $la != DB $lat{$rf}\n";
+                  } 
+               }
+               else
+               {
+                 print "-- $rf can not compare latitude values close to zero\n";
+               }
+            }
+            else
+            {
+               print "-- '$rf' latitude $la not in summit list?\n";
+            }
+
+            if(exists $lon{$rf})
+            {
+               if((abs($lo) > 0.1)&&(abs($lon{$rf}) > 0.1))
+               {
+                  $r = $lo/$lon{$rf};
+                  if(($r < 0.99999)||($r > 1.00001))
+                  {
+                     print "-- $rf ARM longitude $lo != DB $lon{$rf}\n";
+                  }
+               }
+               else
+               {
+                 print "-- $rf can not compare longitude values close to zero\n";
+               }
+            }
+            else
+            {
+               print "-- '$rf' longitude $lo not in summit list?\n";
+            }
+
+            $loc2=lltoqra($lat{$rf},$lon{$rf});
+            if($loc !~ /$loc2/i)
+            {
+               print "-- $rf ARM locator $loc != DB $loc2\n";
+               $loc3 = lltoqra($la,$lo);
+               print "-- $rf locator from ARM coordinates $loc3\n";
+            }
+
+            if(exists $armlocs{$loc})
+            {
+               $armlocs{$loc}++;
+            }
+            else
+            {
+               $armlocs{$loc}=1;
+            }
+
+            if(exists $dblocs{$loc2})
+            {
+               $dblocs{$loc2}++;
+            }
+            else
+            {
+               $dblocs{$loc2}=1;
+            }
+
+            if(exists $pnts{$rf})
+            {
+               print "-- $rf ARM points $pnt != DB $pnts{$rf}\n" if($pnt != $pnts{$rf});
+            }
+            else
+            {
+               print "-- '$rf' points $pnt not in summit list?\n";
+            }
+
+            if(exists $vfrom{$rf})
+            {
+               print "-- $rf ARM start '$from' != DB '$vfrom{$rf}'\n" if($from ne $vfrom{$rf});
+            }
+            else
+            {
+               print "-- '$rf' start date $from not in summit list?\n";
+            }
+
+            if(exists $vto{$rf})
+            {
+               if($to =~ /\d\d\/\d\d\/\d\d/)
+               {
+                  print "-- $rf ARM end '$to' != DB '$vto{$rf}'\n" if($to !~ /$vto{$rf}/);
+               }
+               else
+               {
+                  print "-- $rf ARM end date '$to' vs DB '$vto{$rf}'?\n" if($vto{$rf} !~ /31\/12\/99/);
+               }
+            }
+            else
+            {
+               print "-- '$rf' end date $to not in summit list?\n";
+            }
+
+            if($rf =~ /(\w\w)-\d\d\d/)
+            {
+               $reg = $1;
+               if(exists $armregion{$reg})
+               {
+                  $armregion{$reg}++;
+               }
+               else
+               {
+                  $armregion{$reg}=1;
+               }
+            }
+
+            if(exists $armpnts{$pnt})
+            {
+               $armpnts{$pnt}++;
+            }
+            else
+            {
+               $armpnts{$pnt}=1;
+            }
+
+            if(($opt_n)||($opt_m))
+            {
+               if(exists $names{$rf})
+               {
+                  $texname = char2tex($names{$rf});
+                  $texname =~ s/\s*$//;
+                  $name =~ s/\s*$//;
+                  print "-- $rf ARM TeX name '$name' != DB '$texname'\n" if($texname ne $name);
+               }
+               else
+               {
+                  print "-- '$rf' name $name not in summit list?\n";
+               }
+            }  
+         }
+         else
+         {
+            print "$rf ";
+            print tex2unicode($name);
+            print "\n";
+         }
+      }
+
+      $line = <$TFILE>;
+   }
+
+   if(!$opt_l)
+   {
+      print "Summary\n";
+      print "                         database      ARM\n";
+      print "regions\n";
+      foreach $reg (sort keys %dbregion)
+      {
+         print (sprintf("  %-10.10s             %-4d          %-4d\n", $reg, $dbregion{$reg}, $armregion{$reg}));
+      } 
+
+      print (sprintf("summits                  %-5d         %-5d\n",$ndbsums,$narmsums));
+
+      print (sprintf("grid squares             %-5d         %-5d\n", scalar keys( %dblocs ), scalar keys( %armlocs ))); 
+
+      print "points\n";
+      foreach $pnt (sort {$a<=>$b} keys %dbpnts)
+      {
+         print (sprintf("  %-2d                     %-5d         %-5d\n", $pnt, $dbpnts{$pnt}, $armpnts{$pnt}));
+         $dbpnt+=$pnt*$dbpnts{$pnt};
+         $armpnt+=$pnt*$armpnts{$pnt};
+      } 
+      print (sprintf("  total                  %-5d         %-5d\n", $dbpnt, $armpnt));
+   }
+
+}
+elsif(($ndbsums>0)&&($opt_f))
+{
+   print "Could not read $file\n";
+}
+
+
+# read csv summit list to fill hash for the association name
+sub ReadSummitList
+{
+   my $LFILE;
+   my $line="";
+   my $loc="";
+   my $reg="";
+   my @p;
+
+   print "Checking for duplicates in database list\n" if(!$opt_T);
+   if(open($LFILE,"<",$opt_L))
+   {
+      $line = <$LFILE>;
+      while($line)
+      {
+         @p = split /,/, $line;
+         if(@p>=15)
+         {
+            if(($p[1] =~ /$asso/i)&&($p[0] =~ /.+\w\w-\d\d\d$/))
+            {
+               if($p[0] =~ /.+(\w\w-\d\d\d)$/)
+               { 
+                  $ref = $1;
+                  $reg = "";
+                  $reg = $1 if($p[0] =~ /(\w\w)-\d\d\d/);
+                  $region{$ref} = $p[2]; 
+                  $names{$ref} = $p[3]; 
+                  $altm{$ref} = 1*$p[4];
+                  $altft{$ref} = 1*$p[5]; 
+                  $lon{$ref} = 1*$p[8]; 
+                  $lat{$ref} = 1*$p[9]; 
+
+                  $pnts{$ref} = 1*$p[10]; 
+                  $vfrom{$ref} = $1."/".$2."/".$3 if($p[12] =~ /(\d\d)\/(\d\d)\/\d\d(\d\d)/); 
+                  $vto{$ref} = $1."/".$2."/".$3 if($p[13] =~ /(\d\d)\/(\d\d)\/\d\d(\d\d)/); 
+
+                  $lalo = sprintf("%5.2f %5.2f", $lat{$ref}, $lon{$ref});
+                  if((exists $latlon{$lalo})&&(!$opt_T))
+                  {
+                     print "-- $ref and $latlon{$lalo} are close\n";
+                     print "-- $lat{$ref} $lon{$ref}    $lat{$latlon{$lalo}} $lon{$latlon{$lalo}}\n" if($opt_v);
+                  }
+                  else
+                  {
+                     $latlon{$lalo} = $ref;
+                  }
+
+                  if($reg)
+                  {
+                     if(exists $dbregion{$reg})
+                     {
+                        $dbregion{$reg}++;
+                     }
+                     else
+                     {
+                        $dbregion{$reg}=1;
+                     }
+                  }
+
+                  if(exists $dbpnts{$p[10]})
+                  {
+                     $dbpnts{$p[10]}++;
+                  }
+                  else
+                  {
+                     $dbpnts{$p[10]}=1;
+                  }
+
+                  $ndbsums++;
+                  if($opt_T)
+                  {
+                     print "$ref & $altm{$ref} & $altft{$ref} & ";
+                     print char2tex($names{$ref});
+                     print " & $lat{$ref} & $lon{$ref} & ";
+                     $loc = lltoqra($lat{$ref},$lon{$ref});
+                     print $loc;
+                     print " & $vfrom{$ref} & ";
+                     print $vto{$ref} if($vto{$ref} ne "31/12/99");
+                     print " & $pnts{$ref} \\\\\n\\hline\n";
+                  } 
+               }
+            }
+         }
+         $line = <$LFILE>;
+      }
+   }
+   else
+   {
+     print "Could not read $opt_L\n";
+   }
+}
+
+
+# translate characters to TeX strings 
+sub char2tex
+{
+   my $line=shift;
+   my $c;
+
+   if($opt_n)
+   {
+      foreach $c (keys %texconv2)
+      {
+         $line =~ s/$c/$texconv2{$c}/g;
+      }
+   }
+   elsif($opt_m)
+   {
+      foreach $c (keys %texconv)
+      {
+         $line =~ s/$c/$texconv{$c}/g;
+      }
+   }
+
+   return $line;
+}
+
+# translate TeX strings to Unicode
+# \'a     => \x{00E1}
+# \^a     => \x{00E2}
+# \dj{}   => \x{0111}
+# \"u     => \x{00FC}
+# \"a     => \x{00E4}
+# \"o     => \x{00F6}
+# \oa     => \x{00E5}
+# \ng{}   => \x{014B}
+# \tx{}   => \x{0167}
+# \v\sc   => \x{010D}
+# \v\ss   => \x{0161}
+# \v\sz   => \x{017E}
+# \"U     => \x{00DC}
+# \"A     => \x{00C4}
+# \DJ{}   => x{0110}
+# \"O     => \x{00D6}
+# \oA     => \x{00C5}
+# \NG{}   => \x{014A}
+# \txx{}  => \x{0166}
+# \v\sC   => \x{010C}
+# \v\sS   => \x{0160}
+# \v\sZ   => \x{017D}
+sub tex2unicode
+{
+   my $line=shift;
+   my $c;
+
+# these do not work from %uniconv hash so they are hard coded here
+   $line =~ s/\\dj\{\}/\x{0111}/g;         
+   $line =~ s/\\ng\{\}/\x{014B}/g;
+   $line =~ s/\\tx\{\}/\x{0167}/g;         
+   $line =~ s/\\v\sc/\x{010D}/g;
+   $line =~ s/\\v\ss/\x{0161}/g;
+   $line =~ s/\\v\sz/\x{017E}/g;
+   $line =~ s/\\v\sC/\x{010C}/g;
+   $line =~ s/\\v\sS/\x{0160}/g;
+   $line =~ s/\\v\sZ/\x{017D}/g;
+   $line =~ s/\\oa/\x{00E5}/g;
+   $line =~ s/\\oA/\x{00C5}/g;
+
+   foreach $c (keys %uniconv)
+   {
+      $line =~ s/$c/$uniconv{$c}/g;
+      $line =~ s/\\//g;
+   }
+
+   return $line;
+}
+
+#
+# code borrowed from Dirk Koopman G1TLH DXBearing
+#
+
+sub slat
+{
+        my $n = shift;
+        my ($deg, $min, $sec, $let);
+        $let = $n >= 0 ? 'N' : 'S';
+        $n = abs $n;
+        $deg = int $n;
+        $min = int ((($n-$deg)*60));
+	$sec = int (((($n-$deg)*60)-$min)*60+0.5);
+        return "$deg $min $sec $let";
+}
+
+# turn a longitude in degrees into a string
+sub slong
+{
+        my $n = shift;
+        my ($deg, $min, $sec, $let);
+        $let = $n >= 0 ? 'E' : 'W';
+        $n = abs $n;
+        $deg = int $n;
+        $min = int ((($n-$deg)*60));
+	$sec = int (((($n-$deg)*60)-$min)*60+0.5);
+        return "$deg $min $sec $let";
+}
+
+
+# convert a lat, long in DEGREES to a qra locator 
+sub lltoqra
+{
+        my $lat = shift;
+        my $long = shift;
+
+        my $v;
+        my ($p1, $p2, $p3, $p4, $p5, $p6);
+        
+        $lat += 90;
+        $long += 180;
+        $v = int($long / 20); 
+        $long -= ($v * 20);
+        $p1 = chr(ord('A') + $v);
+        $v = int($lat / 10);                       
+        $lat -= ($v * 10);
+        $p2 = chr(ord('A') + $v);
+        $p3 = int($long/2);
+        $p4 = int($lat);
+        $long -= $p3*2;
+        $lat -= $p4;
+        $p3 = chr(ord('0')+$p3);
+        $p4 = chr(ord('0')+$p4);
+        $p5 = int((12 * $long) );
+        $p6 = int((24 * $lat) );
+        $p5 = chr(ord('A')+$p5);
+        $p6 = chr(ord('A')+$p6);
+
+        return "$p1$p2$p3$p4$p5$p6";
+}
+
+# print version
+sub printversion 
+{
+   print "checkarm version $verno, ";
+   print "Jaakko Koivuniemi, OH7BF\n";
+   exit;
+}
+
+# print usage message
+sub printusage 
+{    
+   print "usage: checkarm [-f arm.tex [-l]] [-L summits.csv -a association [-T]] [-n|-m] [-h] [-v] [-V]\n";
+   exit;
+}
+

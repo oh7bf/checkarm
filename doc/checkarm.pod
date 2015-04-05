@@ -1,0 +1,86 @@
+=head1 NAME
+
+checkarm - Check Association Reference Manual for Summits on the Air programme
+
+=head1 SYNOPSIS
+
+B<checkarm> [B<-f> arm.tex [B<-l>]] 
+[B<-L> summits.csv B<-a> association [B<-T>]] 
+[B<-n>|B<-m>] [B<-h>] [B<-v>] [B<-V>]
+
+=head1 DESCRIPTION
+
+The B<checkarm> can be used to compare local text file ARM 
+(Association Reference Manual) to summit list downloaded from SOTA database. 
+The ARM file is given with option B<-f>, the summit list file with
+option B<-L> and the association name with B<-a>. For each summit reference
+the altitude in both meters and feets are compared. The latitude and
+longitude cooordinates are compared. The grid square locator is calculated
+from the summit list and compared to the value found from local ARM.
+The points attributed to the summit is compared to value found from the
+summit list. The summit validity start and end dates are compared
+between ARM and summit list. The names can be compared too with options
+B<-n> or B<-m>. With option B<-n> ASCII hash is used to convert the 
+characters to LaTeX representation while with option B<-m> Unicode hash
+is used.
+
+After the detailed comparison between local ARM file and database list
+a summary report is printed. This includes list of summits and regions,
+number of locator grid squares and points attributed to different summits.
+
+The summit list from SOTA database is checked for any two summits 
+close to each other. These could be possible doublicates. 
+
+=head1 OPTIONS
+
+B<-f> association reference manual file
+
+B<-l> list all summits in ARM
+
+B<-L> summit list from SOTA database 
+
+B<-a> association name
+
+B<-T> print summit list from database in LaTeX table format
+
+B<-n> convert names with ASCII hash to LaTeX format
+
+B<-m> convert names with Unicode hash to LaTeX format
+
+B<-h> display a short help text
+
+B<-v> verbose
+
+B<-V> print version
+
+=head1 EXAMPLE
+
+Compare local TeX ARM to downloaded CSV summit list
+
+B<checkarm> B<-f> ARM-Finland-20150301.tex B<-L> summitslist.csv B<-a> Finland
+
+List all the summits on the ARM with Unicode for summit names
+
+B<checkarm> B<-f> ARM-Finland-20150301.tex B<-l>
+
+Print LaTeX table formatted list of summits and convert names to LaTeX format
+
+B<checkarm> B<-L> summitslist.csv B<-a> Finland B<-T> B<-m>
+
+=head1 DIAGNOSTICS
+
+The I<checkarm> has been tested with perl v5.10.1. You may need to adapt 
+the script to your environment. 
+
+=head1 BUGS
+
+
+=head1 AUTHORS
+
+Jaakko Koivuniemi OH7BF, if tod lars ta fb7ho
+
+=head1 LINKS
+
+=head1 SEE ALSO
+
+Getopt::Std(3pm) 
