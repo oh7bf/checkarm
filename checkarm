@@ -3,7 +3,7 @@
 #                                                                             
 # Check Tex Association Reference Manual for Summits on the Air programme.
 #
-# This program was written by Jaakko Koivuniemi OH7BF on April 5 2015.  
+# This program was written by Jaakko Koivuniemi OH7BF on April 12 2015.  
 # The grid square calculation code from DXBearing written by Dirk Koopman 
 # G1TLH is used.
 # Copyright (C) 2015 Jaakko Koivuniemi.
@@ -26,9 +26,9 @@ use open ':std', ':encoding(utf-8)';
 
 binmode STDOUT, ":encoding(utf8)";
 
-use subs qw/char2tex lltoqra printusage printversion ReadSummitList slat slong/;
+use subs qw/char2tex inside lltoqra printusage printversion ReadRegBorder ReadSummitList slat slong/;
 
-my $verno="20150405";
+my $verno="20150412";
 
 # unicode character conversion for LaTeX output, used with option '-m'
 my %texconv =('\x{00B0}' => '$^\circ$',
@@ -118,15 +118,20 @@ my %armpnts; # ARM points
 my $dbpnt=0; # database total points
 my $armpnt=0; # ARM total points
 
+my @rlon; # region border longitude coordinate
+my @rlat; # region border latitude coordinate
+
 # options: -h help, -V version, -v verbose, -f Tex file, -L summitlist.csv
 # -a association
-our ($opt_h,$opt_V,$opt_v,$opt_f,$opt_L,$opt_a,$opt_n,$opt_m,$opt_l,$opt_T);
+our ($opt_h,$opt_V,$opt_v,$opt_f,$opt_L,$opt_a,$opt_n,$opt_m,$opt_l,$opt_T,$opt_r);
 
-getopts('hVvf:L:a:nmlT');
+getopts('hVvf:L:a:nmlTr:');
 
 printversion() if($opt_V); 
 printusage() if($opt_h||(!$opt_f)&&(!$opt_L)||((!$opt_L)&&(!$opt_a)&&(!$opt_l))); 
 $asso = $opt_a if($opt_a);
+
+ReadRegBorder() if($opt_r);
 
 if(!$opt_l)
 {
@@ -324,9 +329,12 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
          }
          else
          {
-            print "$rf ";
-            print tex2unicode($name);
-            print "\n";
+            if( ($opt_r)&&(inside($la,$lo)) || !$opt_r )
+            {
+               print "$rf ";
+               print tex2unicode($name);
+               print "\n";
+            }
          }
       }
 
@@ -361,6 +369,28 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
 elsif(($ndbsums>0)&&($opt_f))
 {
    print "Could not read $file\n";
+}
+
+# read region border coordinates from file
+sub ReadRegBorder
+{
+   my $BFILE;
+   my ($lat,$lon);
+
+   if(open($BFILE,"<",$opt_r))
+   {
+      $line = <$BFILE>;
+      while($line)
+      {
+         ($lat, $lon) = split /\s+/, $line;
+         if(($lat) && ($lon))
+         {
+            push(@rlat, $lat);
+            push(@rlon, $lon);
+         }
+         $line = <$BFILE>;
+      }
+   }
 }
 
 
@@ -531,65 +561,103 @@ sub tex2unicode
    return $line;
 }
 
+# check if point is inside polygon defined by @rlat and @rlon
+# http://en.wikipedia.org/wiki/Point_in_polygon
+sub inside
+{
+   my $lat = shift;
+   my $lon = shift;
+   my $isin = 0;
+   my $ncross = 0; # how many times vertical line up crosses polygon
+   my $latc = 0; # crossing latitude coordinate
+   my $i = 0;
+
+   for($i=0;$i<@rlat-1;$i++)
+   {
+      if(($lon>=$rlon[$i])&&($lon<=$rlon[$i+1])||($lon>=$rlon[$i+1])&&($lon<=$rlon[$i]))
+      {
+         if( $rlon[$i]!=$rlon[$i+1] )
+         {
+            $latc=($rlat[$i+1]-$rlat[$i])*($lon-$rlon[$i])/($rlon[$i+1]-$rlon[$i])+$rlat[$i];
+            $ncross++ if( $latc >= $lat );
+         }
+      }  
+   }
+
+   if(($lon>=$rlon[$i])&&($lon<=$rlon[0])||($lon>=$rlon[0])&&($lon<=$rlon[$i]))
+   {
+      if( $rlon[$i] != $rlon[0] )
+      {
+         $latc=($rlat[0]-$rlat[$i])*($lon-$rlon[$i])/($rlon[0]-$rlon[$i])+$rlat[$i];
+         $ncross++ if( $latc >= $lat );
+      }
+   }
+
+#   print "-- crossings $ncross\n";
+   $isin = 1 if(($ncross % 2) == 1);
+
+   return $isin;
+}
+
 #
 # code borrowed from Dirk Koopman G1TLH DXBearing
 #
-
 sub slat
 {
-        my $n = shift;
-        my ($deg, $min, $sec, $let);
-        $let = $n >= 0 ? 'N' : 'S';
-        $n = abs $n;
-        $deg = int $n;
-        $min = int ((($n-$deg)*60));
-	$sec = int (((($n-$deg)*60)-$min)*60+0.5);
-        return "$deg $min $sec $let";
+   my $n = shift;
+   my ($deg, $min, $sec, $let);
+   $let = $n >= 0 ? 'N' : 'S';
+   $n = abs $n;
+   $deg = int $n;
+   $min = int ((($n-$deg)*60));
+   $sec = int (((($n-$deg)*60)-$min)*60+0.5);
+
+   return "$deg $min $sec $let";
 }
 
 # turn a longitude in degrees into a string
 sub slong
 {
-        my $n = shift;
-        my ($deg, $min, $sec, $let);
-        $let = $n >= 0 ? 'E' : 'W';
-        $n = abs $n;
-        $deg = int $n;
-        $min = int ((($n-$deg)*60));
-	$sec = int (((($n-$deg)*60)-$min)*60+0.5);
-        return "$deg $min $sec $let";
+   my $n = shift;
+   my ($deg, $min, $sec, $let);
+   $let = $n >= 0 ? 'E' : 'W';
+   $n = abs $n;
+   $deg = int $n;
+   $min = int ((($n-$deg)*60));
+   $sec = int (((($n-$deg)*60)-$min)*60+0.5);
+
+   return "$deg $min $sec $let";
 }
 
 
 # convert a lat, long in DEGREES to a qra locator 
 sub lltoqra
 {
-        my $lat = shift;
-        my $long = shift;
+   my $lat = shift;
+   my $long = shift;
+    my $v;
+   my ($p1, $p2, $p3, $p4, $p5, $p6);
+   
+   $lat += 90;
+   $long += 180;
+   $v = int($long / 20); 
+   $long -= ($v * 20);
+   $p1 = chr(ord('A') + $v);
+   $v = int($lat / 10);                       
+   $lat -= ($v * 10);
+   $p2 = chr(ord('A') + $v);
+   $p3 = int($long/2);
+   $p4 = int($lat);
+   $long -= $p3*2;
+   $lat -= $p4;
+   $p3 = chr(ord('0')+$p3);
+   $p4 = chr(ord('0')+$p4);
+   $p5 = int((12 * $long) );
+   $p6 = int((24 * $lat) );
+   $p5 = chr(ord('A')+$p5);
+   $p6 = chr(ord('A')+$p6);
 
-        my $v;
-        my ($p1, $p2, $p3, $p4, $p5, $p6);
-        
-        $lat += 90;
-        $long += 180;
-        $v = int($long / 20); 
-        $long -= ($v * 20);
-        $p1 = chr(ord('A') + $v);
-        $v = int($lat / 10);                       
-        $lat -= ($v * 10);
-        $p2 = chr(ord('A') + $v);
-        $p3 = int($long/2);
-        $p4 = int($lat);
-        $long -= $p3*2;
-        $lat -= $p4;
-        $p3 = chr(ord('0')+$p3);
-        $p4 = chr(ord('0')+$p4);
-        $p5 = int((12 * $long) );
-        $p6 = int((24 * $lat) );
-        $p5 = chr(ord('A')+$p5);
-        $p6 = chr(ord('A')+$p6);
-
-        return "$p1$p2$p3$p4$p5$p6";
+   return "$p1$p2$p3$p4$p5$p6";
 }
 
 # print version
@@ -603,7 +671,7 @@ sub printversion
 # print usage message
 sub printusage 
 {    
-   print "usage: checkarm [-f arm.tex [-l]] [-L summits.csv -a association [-T]] [-n|-m] [-h] [-v] [-V]\n";
+   print "usage: checkarm [-f arm.tex [-l]] [-L summits.csv -a association [-T]] [-n|-m] [-r region.txt] [-h] [-v] [-V]\n";
    exit;
 }
 

@@ -6,7 +6,8 @@ checkarm - Check Association Reference Manual for Summits on the Air programme
 
 B<checkarm> [B<-f> arm.tex [B<-l>]] 
 [B<-L> summits.csv B<-a> association [B<-T>]] 
-[B<-n>|B<-m>] [B<-h>] [B<-v>] [B<-V>]
+[B<-n>|B<-m>] [B<-r> region.txt]
+[B<-h>] [B<-v>] [B<-V>]
 
 =head1 DESCRIPTION
 
@@ -15,9 +16,9 @@ The B<checkarm> can be used to compare local text file ARM
 The ARM file is given with option B<-f>, the summit list file with
 option B<-L> and the association name with B<-a>. For each summit reference
 the altitude in both meters and feets are compared. The latitude and
-longitude cooordinates are compared. The grid square locator is calculated
+longitude coordinates are compared. The grid square locator is calculated
 from the summit list and compared to the value found from local ARM.
-The points attributed to the summit is compared to value found from the
+The points attributed to the summit are compared to value found from the
 summit list. The summit validity start and end dates are compared
 between ARM and summit list. The names can be compared too with options
 B<-n> or B<-m>. With option B<-n> ASCII hash is used to convert the 
@@ -29,7 +30,7 @@ a summary report is printed. This includes list of summits and regions,
 number of locator grid squares and points attributed to different summits.
 
 The summit list from SOTA database is checked for any two summits 
-close to each other. These could be possible doublicates. 
+close to each other. These could be possible duplicates. 
 
 =head1 OPTIONS
 
@@ -47,6 +48,8 @@ B<-n> convert names with ASCII hash to LaTeX format
 
 B<-m> convert names with Unicode hash to LaTeX format
 
+B<-r> list of latitude and longitude coordinates for region definition
+
 B<-h> display a short help text
 
 B<-v> verbose
@@ -62,6 +65,10 @@ B<checkarm> B<-f> ARM-Finland-20150301.tex B<-L> summitslist.csv B<-a> Finland
 List all the summits on the ARM with Unicode for summit names
 
 B<checkarm> B<-f> ARM-Finland-20150301.tex B<-l>
+
+Select summits inside polygon defined in file I<region.txt>
+
+B<checkarm> B<-f> ARM-Finland-20150301.tex B<-l> B<-r> region.txt
 
 Print LaTeX table formatted list of summits and convert names to LaTeX format
 
