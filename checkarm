@@ -3,10 +3,10 @@
 #                                                                             
 # Check Tex Association Reference Manual for Summits on the Air programme.
 #
-# This program was written by Jaakko Koivuniemi OH7BF on April 12 2015.  
+# This program was written by Jaakko Koivuniemi OH7BF on March 27 2016.  
 # The grid square calculation code from DXBearing written by Dirk Koopman 
 # G1TLH is used.
-# Copyright (C) 2015 Jaakko Koivuniemi.
+# Copyright (C) 2015-2016 Jaakko Koivuniemi.
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -26,9 +26,9 @@ use open ':std', ':encoding(utf-8)';
 
 binmode STDOUT, ":encoding(utf8)";
 
-use subs qw/char2tex inside lltoqra printusage printversion ReadRegBorder ReadSummitList slat slong/;
+use subs qw/char2tex inside lltoqra printusage printversion ReadRegBorder ReadSummitList ReadSummitText slat slong/;
 
-my $verno="20150412";
+my $verno="20160327";
 
 # unicode character conversion for LaTeX output, used with option '-m'
 my %texconv =('\x{00B0}' => '$^\circ$',
@@ -95,6 +95,7 @@ my %uniconv =("\\'a" => "\x{00E1}",
 my $asso="Unknown";
 my $file="";
 my $ref; # summit SOTA reference
+my $sc="&"; # separation character between columns
 my %region; # region name for each SOTA reference
 my %names; # summit name for each SOTA reference
 my %lat; # latitude for each SOTA reference
@@ -103,6 +104,7 @@ my %latlon; # latitude/longitude for each SOTA reference
 my $lalo; # truncated latitude/longitude for duplicate checking
 my %altm; # altitude in meters for each SOTA reference
 my %altft; # altitude in feet for each SOTA reference
+my %locs; # locator for each SOTA reference
 my %pnts; # points for each SOTA reference
 my %vfrom; # valid from date for each SOTA reference
 my %vto; # valid to date for each SOTA reference
@@ -135,7 +137,18 @@ ReadRegBorder() if($opt_r);
 
 if(!$opt_l)
 {
-   ReadSummitList();
+   if( $opt_L =~ /\w+\.csv$/i)
+   {
+      ReadSummitList();
+   }
+   elsif( $opt_L =~ /\w+\.txt$/i)
+   {
+      ReadSummitText();
+   }
+   else
+   {
+      print("Unknown file extension.\n");
+   }
 
    print "No summits for '$asso' where found from database list\n" if($ndbsums==0);
 }
@@ -146,15 +159,36 @@ my ($rf,$la,$lo,$loc,$loc2,$loc3,$name,$am,$aft,$from,$to,$pnt);
 my $r=0;
 my $texname="";
 my $reg="";
+my @cols;
+my $i=0;
+my $ftype="DB";
 
 $file = $opt_f if($opt_f);
 if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
 {
-   print "Compare ARM and database list\n" if(!$opt_l);
+   if(!$opt_l)
+   {
+      if( $opt_L =~ /\w+\.csv$/i)
+      {
+         print "Compare TeX ARM and database list\n";
+         $ftype = "DB";
+      }
+      elsif( $opt_L =~ /\w+\.txt$/i)
+      {
+         print "Compare TeX ARM and text file\n";
+         $ftype = "text";
+      }
+   } 
+
    $line = <$TFILE>;
    while($line)
    {
 # JS-001 & 367 & 1206 & Naulavaara           & 63.88749 & 28.24187 & KP43CV & 01/05/10 & & 1 
+      @cols = split /$sc/, $line;
+      for($i=0;$i<@cols;$i++)
+      {
+         $cols[$i] =~ s/^\s*(.*?)\s*$/$1/;
+      }
       if($line =~ /^(\w\w-\d\d\d)\s+&\s+(\d{3,4})\s+&\s+(\d{3,5})\s+&\s+(.+)\s+&\s+([+-]?\d{1,2}\.\d{3,7})\s+&\s+([+-]?\d{1,2}\.\d{3,7})\s+&\s+(\w\w\d\d\w\w)\s+&\s+(\d\d\/\d\d\/\d\d)\s+&\s+(.*)\s*&\s+(\d{1,2}).+/)
       {
 #         print "$1 $4 $5 $6\n";
@@ -174,7 +208,7 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
          {
             if(exists $altm{$rf})
             {
-               print "-- $rf ARM altitude $am m != DB $altm{$rf} m\n" if($am != $altm{$rf});
+               print "-- $rf ARM altitude $am m != $ftype $altm{$rf} m\n" if($am != $altm{$rf});
             }
             else
             {
@@ -183,7 +217,7 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
 
             if(exists $altft{$rf})
             {
-               print "-- $rf ARM altitude $aft ft != DB $altft{$rf} ft\n" if($aft != $altft{$rf});
+               print "-- $rf ARM altitude $aft ft != $ftype $altft{$rf} ft\n" if($aft != $altft{$rf});
             }
             else
             {
@@ -197,7 +231,7 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
                   $r = $la/$lat{$rf};
                   if(($r < 0.99999)||($r > 1.00001))
                   {
-                     print "-- $rf ARM latitude $la != DB $lat{$rf}\n";
+                     print "-- $rf ARM latitude $la != $ftype $lat{$rf}\n";
                   } 
                }
                else
@@ -217,7 +251,7 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
                   $r = $lo/$lon{$rf};
                   if(($r < 0.99999)||($r > 1.00001))
                   {
-                     print "-- $rf ARM longitude $lo != DB $lon{$rf}\n";
+                     print "-- $rf ARM longitude $lo != $ftype $lon{$rf}\n";
                   }
                }
                else
@@ -233,7 +267,7 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
             $loc2=lltoqra($lat{$rf},$lon{$rf});
             if($loc !~ /$loc2/i)
             {
-               print "-- $rf ARM locator $loc != DB $loc2\n";
+               print "-- $rf ARM locator $loc != $ftype $loc2\n";
                $loc3 = lltoqra($la,$lo);
                print "-- $rf locator from ARM coordinates $loc3\n";
             }
@@ -258,7 +292,7 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
 
             if(exists $pnts{$rf})
             {
-               print "-- $rf ARM points $pnt != DB $pnts{$rf}\n" if($pnt != $pnts{$rf});
+               print "-- $rf ARM points $pnt != $ftype $pnts{$rf}\n" if($pnt != $pnts{$rf});
             }
             else
             {
@@ -267,7 +301,7 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
 
             if(exists $vfrom{$rf})
             {
-               print "-- $rf ARM start '$from' != DB '$vfrom{$rf}'\n" if($from ne $vfrom{$rf});
+               print "-- $rf ARM start '$from' != $ftype '$vfrom{$rf}'\n" if($from ne $vfrom{$rf});
             }
             else
             {
@@ -278,11 +312,11 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
             {
                if($to =~ /\d\d\/\d\d\/\d\d/)
                {
-                  print "-- $rf ARM end '$to' != DB '$vto{$rf}'\n" if($to !~ /$vto{$rf}/);
+                  print "-- $rf ARM end '$to' != $ftype '$vto{$rf}'\n" if($to !~ /$vto{$rf}/);
                }
                else
                {
-                  print "-- $rf ARM end date '$to' vs DB '$vto{$rf}'?\n" if($vto{$rf} !~ /31\/12\/99/);
+                  print "-- $rf ARM end date '$to' vs $ftype '$vto{$rf}'?\n" if($vto{$rf} !~ /31\/12\/99/);
                }
             }
             else
@@ -319,7 +353,7 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
                   $texname = char2tex($names{$rf});
                   $texname =~ s/\s*$//;
                   $name =~ s/\s*$//;
-                  print "-- $rf ARM TeX name '$name' != DB '$texname'\n" if($texname ne $name);
+                  print "-- $rf ARM TeX name '$name' != $ftype '$texname'\n" if($texname ne $name);
                }
                else
                {
@@ -344,7 +378,7 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
    if(!$opt_l)
    {
       print "Summary\n";
-      print "                         database      ARM\n";
+      print "                         $ftype            ARM\n";
       print "regions\n";
       foreach $reg (sort keys %dbregion)
       {
@@ -425,12 +459,12 @@ sub ReadSummitList
                   $altft{$ref} = 1*$p[5]; 
                   $lon{$ref} = 1*$p[8]; 
                   $lat{$ref} = 1*$p[9]; 
-
                   $pnts{$ref} = 1*$p[10]; 
+
                   $vfrom{$ref} = $1."/".$2."/".$3 if($p[12] =~ /(\d\d)\/(\d\d)\/\d\d(\d\d)/); 
                   $vto{$ref} = $1."/".$2."/".$3 if($p[13] =~ /(\d\d)\/(\d\d)\/\d\d(\d\d)/); 
-
                   $lalo = sprintf("%5.2f %5.2f", $lat{$ref}, $lon{$ref});
+
                   if((exists $latlon{$lalo})&&(!$opt_T))
                   {
                      print "-- $ref and $latlon{$lalo} are close\n";
@@ -461,8 +495,8 @@ sub ReadSummitList
                   {
                      $dbpnts{$p[10]}=1;
                   }
-
                   $ndbsums++;
+
                   if($opt_T)
                   {
                      print "$ref & $altm{$ref} & $altft{$ref} & ";
@@ -485,6 +519,157 @@ sub ReadSummitList
      print "Could not read $opt_L\n";
    }
 }
+
+
+# read text summit list to fill hash for the association name
+sub ReadSummitText
+{
+   my $LFILE;
+   my $line="";
+   my $loc="";
+   my $reg="";
+   my @p;
+
+   print "Checking for duplicates on text list\n" if(!$opt_T);
+   if(open($LFILE,"<",$opt_L))
+   {
+      $line = <$LFILE>;
+
+# match to:
+# JS-001
+# 367
+# 1206
+# Naulavaara
+# 63.88749
+# 28.24187
+# KP43CV
+# 01/05/10
+#  
+# 1
+
+      while( $line )
+      {
+         if( $line =~ /^(\w\w-\d\d\d)/ )
+         {
+            $ref = $1;
+            $reg = "";
+            $reg = $1 if( $line =~ /(\w\w)-\d\d\d/ );
+
+            $line = <$LFILE>;
+            if( $line =~ /^(\d{3,4})/ )
+            {
+               $altm{$ref} = 1*$1;
+
+               $line = <$LFILE>;
+               if( $line =~ /^(\d{3,5})/ )
+               {
+                  $altft{$ref} = 1*$1; 
+
+                  $line = <$LFILE>;
+                  if( $line )
+                  {
+                     chomp $line;
+                     $names{$ref} = $line; 
+
+                     $line = <$LFILE>;
+                     if( $line =~ /^([+-]?\d{1,2}\.\d{3,7})/ )
+                     {
+                        $lat{$ref} = 1*$1; 
+
+                        $line = <$LFILE>;
+                        if( $line =~ /^([+-]?\d{1,2}\.\d{3,7})/ )
+                        {  
+                           $lon{$ref} = 1*$1;
+
+                           $line = <$LFILE>;
+                           if( $line =~ /^(\w\w\d\d\w\w)/ )
+                           {
+                              $locs{$ref} = $1;
+
+                              $line = <$LFILE>;
+                              if( $line =~ /^(\d\d\/\d\d\/\d\d)/ )
+                              {
+                                 $vfrom{$ref} = $1;
+
+                                 $line = <$LFILE>;
+
+                                 if( $line =~ /^(\d\d\/\d\d\/\d\d)/ )
+                                 {
+                                    $vto{$ref} = $1;
+                                 }
+                                 else
+                                 {
+                                    $vto{$ref} = "31/12/99" ;
+                                 }
+
+                                 $line = <$LFILE>;
+                                 if( $line =~ /^(\d{1,2})/ )
+                                 {
+                                   $pnts{$ref} = 1*$1;
+
+                                   $lalo = sprintf("%5.2f %5.2f", $lat{$ref}, $lon{$ref});
+                                   if((exists $latlon{$lalo})&&(!$opt_T))
+                                   {
+                                      print "-- $ref and $latlon{$lalo} are close\n";
+                                      print "-- $lat{$ref} $lon{$ref}    $lat{$latlon{$lalo}} $lon{$latlon{$lalo}}\n" if($opt_v);
+                                   }
+                                   else
+                                   {
+                                      $latlon{$lalo} = $ref;
+                                   }
+
+                                   if($reg)
+                                   {
+                                      if(exists $dbregion{$reg})
+                                      {
+                                         $dbregion{$reg}++;
+                                      }
+                                      else
+                                      {
+                                         $dbregion{$reg}=1;
+                                      }
+                                   }
+
+                                   if(exists $dbpnts{$pnts{$ref}})
+                                   {
+                                      $dbpnts{$pnts{$ref}}++;
+                                   }
+                                   else
+                                   {
+                                      $dbpnts{$pnts{$ref}} = 1;
+                                   }
+                                   $ndbsums++;
+
+                                   if($opt_T)
+                                   {
+                                      print "$ref & $altm{$ref} & $altft{$ref} & ";
+                                      print char2tex($names{$ref});
+                                      print " & $lat{$ref} & $lon{$ref} & ";
+                                      $loc = lltoqra($lat{$ref},$lon{$ref});
+                                      print $loc;
+                                      print " & $vfrom{$ref} & ";
+                                      print $vto{$ref} if($vto{$ref} ne "31/12/99");
+                                      print " & $pnts{$ref} \\\\\n\\hline\n";
+                                   } 
+                                 }
+                              }
+                           } 
+                        }
+                     }
+                  } 
+               }
+            }
+         }
+
+         $line = <$LFILE>;
+      }
+   }
+   else
+   {
+     print "Could not read $opt_L\n";
+   }
+}
+
 
 
 # translate characters to TeX strings 
@@ -671,7 +856,7 @@ sub printversion
 # print usage message
 sub printusage 
 {    
-   print "usage: checkarm [-f arm.tex [-l]] [-L summits.csv -a association [-T]] [-n|-m] [-r region.txt] [-h] [-v] [-V]\n";
+   print "usage: checkarm [-f arm.tex [-l]] [-L summits.csv|summits.txt -a association [-T]] [-n|-m] [-r region.txt] [-h] [-v] [-V]\n";
    exit;
 }
 

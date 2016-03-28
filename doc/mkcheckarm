@@ -1,2 +1,2 @@
 #!/bin/bash
-pod2man -c "Hamradio" -r "version 20150412" checkarm.pod checkarm.1
+pod2man -c "Hamradio" -r "version 20160327" checkarm.pod checkarm.1

@@ -5,7 +5,7 @@ checkarm - Check Association Reference Manual for Summits on the Air programme
 =head1 SYNOPSIS
 
 B<checkarm> [B<-f> arm.tex [B<-l>]] 
-[B<-L> summits.csv B<-a> association [B<-T>]] 
+[B<-L> summits.csv|summits.txt B<-a> association [B<-T>]] 
 [B<-n>|B<-m>] [B<-r> region.txt]
 [B<-h>] [B<-v>] [B<-V>]
 
@@ -62,6 +62,34 @@ Compare local TeX ARM to downloaded CSV summit list
 
 B<checkarm> B<-f> ARM-Finland-20150301.tex B<-L> summitslist.csv B<-a> Finland
 
+Compare local TeX ARM to Text Encoded file of ARM
+
+checkarm -f ARM-Finland-20150301.tex -L ARM-Finland-20150302.txt  
+
+This assumes that the summit tables in the text file are like
+
+I<JS-001>
+
+I<367>
+
+I<1206>
+
+I<Naulavaara>
+
+I<63.88749>
+
+I<28.24187>
+
+I<KP43CV>
+
+I<01/05/10>
+
+I<-empty line->
+
+I<1>
+
+...
+
 List all the summits on the ARM with Unicode for summit names
 
 B<checkarm> B<-f> ARM-Finland-20150301.tex B<-l>
@@ -81,6 +109,7 @@ the script to your environment.
 
 =head1 BUGS
 
+Rapid coding.
 
 =head1 AUTHORS
 
