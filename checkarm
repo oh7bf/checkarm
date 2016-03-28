@@ -264,7 +264,15 @@ if(open($TFILE,"<",$file) && (($ndbsums>0)||($opt_l)&&(!$opt_T)))
                print "-- '$rf' longitude $lo not in summit list?\n";
             }
 
-            $loc2=lltoqra($lat{$rf},$lon{$rf});
+            if( $opt_L =~ /\w+\.txt$/i)
+            {
+               $loc2 = $locs{$rf};
+            }
+            else
+            {
+               $loc2=lltoqra($lat{$rf},$lon{$rf});
+            }
+
             if($loc !~ /$loc2/i)
             {
                print "-- $rf ARM locator $loc != $ftype $loc2\n";
